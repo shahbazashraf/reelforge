@@ -3,6 +3,15 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase'
 import { PLATFORMS } from '@/lib/platforms'
+import {
+  Eye,
+  Send,
+  Plug,
+  Clock,
+  Lightbulb,
+  TrendingUp,
+  ArrowUpRight,
+} from 'lucide-react'
 
 interface Stats { totalViews: number; totalPosts: number; platforms: Record<string,number>; recentJobs: any[] }
 
@@ -28,62 +37,93 @@ export default function AnalyticsPage() {
   }
 
   const statCards = [
-    { label: 'Total Views', value: stats.totalViews >= 1000 ? `${(stats.totalViews/1000).toFixed(1)}K` : stats.totalViews, icon: 'ti-eye', color: '#7C5CFC', bg: 'rgba(124,92,252,0.15)' },
-    { label: 'Posts Published', value: stats.totalPosts, icon: 'ti-send', color: '#22C55E', bg: 'rgba(34,197,94,0.15)' },
-    { label: 'Platforms Active', value: Object.keys(stats.platforms).length, icon: 'ti-plug-connected', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
-    { label: 'Pending Jobs', value: stats.recentJobs.filter(j=>j.status==='pending'||j.status==='processing').length, icon: 'ti-clock', color: '#3B82F6', bg: 'rgba(59,130,246,0.15)' },
+    { label: 'Total Views', value: stats.totalViews >= 1000 ? `${(stats.totalViews/1000).toFixed(1)}K` : stats.totalViews, icon: Eye, iconColor: 'text-[#E11D48]', iconBg: 'bg-rose-50' },
+    { label: 'Posts Published', value: stats.totalPosts, icon: Send, iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50' },
+    { label: 'Platforms Active', value: Object.keys(stats.platforms).length, icon: Plug, iconColor: 'text-amber-600', iconBg: 'bg-amber-50' },
+    { label: 'Pending Jobs', value: stats.recentJobs.filter(j=>j.status==='pending'||j.status==='processing').length, icon: Clock, iconColor: 'text-blue-600', iconBg: 'bg-blue-50' },
   ]
 
-  const STATUS_COLOR: Record<string,string> = { published: '#22C55E', pending: '#F59E0B', processing: '#9B80FF', failed: '#EF4444', cancelled: 'rgba(255,255,255,0.3)' }
+  const STATUS_STYLES: Record<string, string> = {
+    published: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    pending: 'bg-amber-50 text-amber-600 border-amber-200',
+    processing: 'bg-rose-50 text-rose-500 border-rose-200',
+    failed: 'bg-red-50 text-red-500 border-red-200',
+    cancelled: 'bg-slate-100 text-slate-400 border-slate-200',
+  }
 
   return (
-    <div style={{ padding: '28px 32px' }}>
-      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 28 }}>
-        <h1 style={{ fontFamily: 'Syne,sans-serif', fontSize: 26, fontWeight: 800, letterSpacing: '-0.5px', marginBottom: 6 }}>Analytics</h1>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Cross-platform performance overview</p>
+    <div className="p-7 md:p-8">
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-7">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-slate-900 mb-1.5">Analytics</h1>
+        <p className="text-sm text-slate-500">Cross-platform performance overview</p>
       </motion.div>
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 28 }}>
-        {statCards.map((s, i) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: '18px 20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div>
-                <div style={{ fontFamily: 'Syne,sans-serif', fontSize: 28, fontWeight: 800, letterSpacing: '-1px' }}>{loading ? '—' : s.value}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{s.label}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
+        {statCards.map((s, i) => {
+          const Icon = s.icon
+          return (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07 }}
+              className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <div className="font-display text-3xl font-extrabold tracking-tight text-slate-900">
+                    {loading ? '—' : s.value}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">{s.label}</div>
+                </div>
+                <div className={`w-10 h-10 rounded-xl ${s.iconBg} flex items-center justify-center`}>
+                  <Icon className={`w-5 h-5 ${s.iconColor}`} />
+                </div>
               </div>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: s.color }}>
-                <i className={`ti ${s.icon}`} />
-              </div>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          )
+        })}
       </div>
 
-      {/* Platform breakdown */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: 20 }}>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 700, marginBottom: 18 }}>Posts by platform</div>
+      {/* Platform breakdown + Recent activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-7">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm"
+        >
+          <div className="font-display text-sm font-bold text-slate-800 mb-5 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-[#E11D48]" />
+            Posts by platform
+          </div>
           {Object.keys(stats.platforms).length === 0
-            ? <div style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: '20px 0' }}>No published posts yet</div>
+            ? <div className="text-sm text-slate-400 text-center py-8">No published posts yet</div>
             : Object.entries(PLATFORMS).map(([id, cfg]) => {
                 const count = stats.platforms[id] || 0
                 const max = Math.max(...Object.values(stats.platforms), 1)
                 return (
-                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 7, background: cfg.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <i className={`ti ${cfg.icon}`} style={{ fontSize: 12, color: id==='snapchat'?'#000':'#fff' }} />
+                  <div key={id} className="flex items-center gap-3 mb-3 last:mb-0">
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs text-white font-bold"
+                      style={{ background: cfg.gradient }}
+                    >
+                      {cfg.label.charAt(0)}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, fontWeight: 500 }}>{cfg.label}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{count}</span>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-xs font-medium text-slate-700">{cfg.label}</span>
+                        <span className="text-xs text-slate-400">{count}</span>
                       </div>
-                      <div style={{ height: 4, background: 'var(--bg-overlay)', borderRadius: 2 }}>
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${(count/max)*100}%` }} transition={{ delay: 0.5, duration: 0.7 }}
-                          style={{ height: '100%', borderRadius: 2, background: cfg.color === '#ffffff' ? 'rgba(255,255,255,0.5)' : cfg.color }} />
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(count/max)*100}%` }}
+                          transition={{ delay: 0.5, duration: 0.7 }}
+                          className="h-full rounded-full"
+                          style={{ background: cfg.gradient }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -93,40 +133,57 @@ export default function AnalyticsPage() {
         </motion.div>
 
         {/* Recent activity */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 14, padding: 20 }}>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 700, marginBottom: 18 }}>Recent publish jobs</div>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm"
+        >
+          <div className="font-display text-sm font-bold text-slate-800 mb-5 flex items-center gap-2">
+            <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+            Recent publish jobs
+          </div>
           {stats.recentJobs.length === 0
-            ? <div style={{ fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center', padding: '20px 0' }}>No jobs yet — publish your first project</div>
-            : stats.recentJobs.slice(0,8).map(job => {
-                const cfg = PLATFORMS[job.platform]
-                return (
-                  <div key={job.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                    {cfg && <div style={{ width: 22, height: 22, borderRadius: 6, background: cfg.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <i className={`ti ${cfg.icon}`} style={{ fontSize: 10, color: job.platform==='snapchat'?'#000':'#fff' }} />
-                    </div>}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cfg?.label || job.platform}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{new Date(job.created_at).toLocaleDateString()}</div>
+            ? <div className="text-sm text-slate-400 text-center py-8">No jobs yet — publish your first project</div>
+            : <div className="space-y-0">
+                {stats.recentJobs.slice(0,8).map(job => {
+                  const cfg = PLATFORMS[job.platform]
+                  const statusClass = STATUS_STYLES[job.status] || STATUS_STYLES.cancelled
+                  return (
+                    <div key={job.id} className="flex items-center gap-3 py-2.5 border-b border-slate-100/60 last:border-0">
+                      {cfg && (
+                        <div
+                          className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[9px] text-white font-bold"
+                          style={{ background: cfg.gradient }}
+                        >
+                          {cfg.label.charAt(0)}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-slate-700 truncate">{cfg?.label || job.platform}</div>
+                        <div className="text-[10px] text-slate-400">{new Date(job.created_at).toLocaleDateString()}</div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize border ${statusClass}`}>
+                        {job.status}
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: `${STATUS_COLOR[job.status]}18`, color: STATUS_COLOR[job.status] || 'var(--text-tertiary)', fontSize: 10, fontWeight: 700 }}>
-                      {job.status}
-                    </div>
-                  </div>
-                )
-              })
+                  )
+                })}
+              </div>
           }
         </motion.div>
       </div>
 
       {/* Tip */}
-      <div style={{ padding: '16px 20px', background: 'var(--brand-dim)', border: '1px solid rgba(124,92,252,0.2)', borderRadius: 12, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <i className="ti ti-bulb" style={{ fontSize: 18, color: 'var(--brand-light)', flexShrink: 0, marginTop: 1 }} />
+      <div className="flex gap-3 p-4 bg-rose-50/60 border border-rose-100 rounded-xl items-start">
+        <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center shrink-0">
+          <Lightbulb className="w-4 h-4 text-[#E11D48]" />
+        </div>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Connect more platforms to see richer analytics</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Real engagement data (likes, comments, reach) is pulled directly from each platform's API. Go to{' '}
-            <a href="/dashboard/social-accounts" style={{ color: 'var(--brand-light)' }}>Social Accounts</a>{' '}
+          <div className="text-sm font-semibold text-slate-800 mb-1">Connect more platforms to see richer analytics</div>
+          <div className="text-xs text-slate-500 leading-relaxed">
+            Real engagement data (likes, comments, reach) is pulled directly from each platform&apos;s API. Go to{' '}
+            <a href="/dashboard/social-accounts" className="text-[#E11D48] hover:underline font-medium">Social Accounts</a>{' '}
             to connect Instagram, TikTok, Facebook and more.
           </div>
         </div>

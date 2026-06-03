@@ -1,5 +1,6 @@
 // app/api/ai/hashtags/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { getAIProvider, callAI } from '@/lib/ai-provider'
 
 export async function POST(request: NextRequest) {
   const { caption, platform = 'instagram' } = await request.json()
@@ -9,20 +10,19 @@ export async function POST(request: NextRequest) {
 Post: ${caption}`
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-      }),
-    })
-    const data = await res.json()
-    const text = data.choices[0].message.content.trim()
+    const provider = getAIProvider()
+    if (!provider) {
+      return NextResponse.json(
+        { error: 'No AI provider configured. Set GROQ_API_KEY or OPENROUTER_API_KEY in .env.local' },
+        { status: 500 }
+      )
+    }
+
+    const text = await callAI(provider, [{ role: 'user', content: prompt }], { temperature: 0.7 })
     const hashtags: string[] = JSON.parse(text)
     return NextResponse.json({ hashtags })
   } catch (err) {
+    console.error('[hashtags] Error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

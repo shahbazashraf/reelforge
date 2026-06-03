@@ -185,6 +185,47 @@ export default function StudioPage() {
     setPublishing(false)
   }
 
+  // Render and Download
+  const [rendering, setRendering] = useState(false)
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+
+  async function handleRender() {
+    if (!store.projectId) { toast.error('Save project first'); await saveProject(); return }
+    if (!store.scenes.length) { toast.error('Add at least one scene'); return }
+    setRendering(true)
+    setDownloadUrl(null)
+    try {
+      await saveProject()
+      const res = await fetch('/api/projects/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: store.projectId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success('Rendering started. Please wait...')
+      
+      const jobId = data.jobId
+      const interval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/projects/render/${jobId}`)
+          if (statusRes.ok) {
+            const statusData = await statusRes.json()
+            if (statusData.status === 'ready' && statusData.download_url) {
+              clearInterval(interval)
+              setRendering(false)
+              setDownloadUrl(statusData.download_url)
+              toast.success('Video ready for download!')
+            }
+          }
+        } catch (e) {}
+      }, 3000)
+    } catch (e: any) {
+      toast.error(e.message || 'Render failed')
+      setRendering(false)
+    }
+  }
+
   const activeScene = store.scenes[store.activeSceneIndex]
   const totalDuration = store.scenes.reduce((a, s) => a + s.duration_ms, 0)
 
@@ -467,12 +508,36 @@ export default function StudioPage() {
               style={{ width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }} />
           </div>
 
+          {/* Render and Download */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            {!downloadUrl ? (
+              <motion.button
+                whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                onClick={handleRender}
+                disabled={rendering}
+                style={{ flex: 1, padding: '13px', borderRadius: 11, background: rendering?'var(--bg-overlay)':'var(--bg-elevated)', color: rendering?'var(--text-tertiary)':'var(--text-primary)', border: '1px solid var(--border-strong)', fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 700, cursor: rendering?'not-allowed':'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {rendering
+                  ? <><i className="ti ti-loader" style={{ animation: 'spin 1s linear infinite' }} /> Rendering...</>
+                  : <><i className="ti ti-movie" /> Render Video</>
+                }
+              </motion.button>
+            ) : (
+              <motion.a
+                href={downloadUrl}
+                download
+                whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                style={{ flex: 1, textDecoration: 'none', padding: '13px', borderRadius: 11, background: 'var(--teal, #14B8A6)', color: '#fff', border: 'none', fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <i className="ti ti-download" /> Download Video
+              </motion.a>
+            )}
+          </div>
+
           {/* Publish button */}
           <motion.button
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
             onClick={handlePublish}
             disabled={publishing || !store.selectedPlatforms.length}
-            style={{ width: '100%', padding: '13px', borderRadius: 11, background: publishing?'#5B3FE0':'linear-gradient(135deg,var(--brand),#5B3FE0)', color: '#fff', border: 'none', fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 800, cursor: publishing?'not-allowed':'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 20px rgba(124,92,252,0.35)', marginTop: 4 }}>
+            style={{ width: '100%', padding: '13px', borderRadius: 11, background: publishing?'#5B3FE0':'linear-gradient(135deg,var(--brand),#5B3FE0)', color: '#fff', border: 'none', fontFamily: 'Syne,sans-serif', fontSize: 14, fontWeight: 800, cursor: publishing?'not-allowed':'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 20px rgba(124,92,252,0.35)' }}>
             {publishing
               ? <><i className="ti ti-loader" style={{ animation: 'spin 1s linear infinite' }} /> Publishing...</>
               : scheduleAt

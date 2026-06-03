@@ -35,3 +35,22 @@ next-env.d.ts
 .clause/
 .agent/
 
+# Python / Backend dependencies
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Frontend / Lint cache
+.eslintcache
+.stylelintcache
+
+

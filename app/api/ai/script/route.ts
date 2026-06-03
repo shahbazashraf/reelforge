@@ -1,5 +1,6 @@
 // app/api/ai/script/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { getAIProvider, callAI } from '@/lib/ai-provider'
 
 export async function POST(request: NextRequest) {
   const { concept, numScenes = 6, platform = 'instagram', style } = await request.json()
@@ -24,26 +25,29 @@ Return this exact JSON structure:
 }`
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.8,
-      }),
-    })
-    const data = await res.json()
-    const script = JSON.parse(data.choices[0].message.content)
+    const provider = getAIProvider()
+    if (!provider) {
+      return NextResponse.json(
+        { error: 'No AI provider configured. Set GROQ_API_KEY or OPENROUTER_API_KEY in .env.local' },
+        { status: 500 }
+      )
+    }
+
+    console.log(`[script] provider=${provider.name} model=${provider.model}`)
+
+    const content = await callAI(
+      provider,
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { temperature: 0.8, jsonMode: true }
+    )
+
+    const script = JSON.parse(content)
     return NextResponse.json({ success: true, script })
   } catch (err) {
+    console.error('[script] Error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

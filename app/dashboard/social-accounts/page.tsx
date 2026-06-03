@@ -7,6 +7,20 @@ import { createClient } from '@/lib/supabase'
 import { PLATFORMS, getOAuthUrl } from '@/lib/platforms'
 import type { SocialAccount } from '@/types'
 import { toast } from 'sonner'
+import {
+  Plug,
+  ShieldCheck,
+  RefreshCw,
+  Unlink,
+  AlertTriangle,
+  Check,
+  Clock,
+  ImageUp,
+  BarChart3,
+  User,
+  Loader2,
+  ExternalLink,
+} from 'lucide-react'
 
 const PLATFORM_ORDER = ['instagram', 'tiktok', 'facebook', 'twitter', 'youtube', 'snapchat']
 
@@ -61,28 +75,25 @@ export default function SocialAccountsPage() {
   const connectedCount = connectedPlatforms.size
 
   return (
-    <div style={{ padding: 32, maxWidth: 960, margin: '0 auto' }}>
+    <div className="p-7 md:p-8 max-w-[960px] mx-auto">
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+        <div className="flex items-start justify-between">
           <div>
-            <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: 26, fontWeight: 800, letterSpacing: '-0.5px', marginBottom: 6 }}>
+            <h1 className="font-display text-2xl font-extrabold tracking-tight text-slate-900 mb-1.5">
               Social Accounts
             </h1>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <p className="text-sm text-slate-500 leading-relaxed">
               Connect your social accounts once. Publish to all platforms with one click.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px',
-              borderRadius: 99, background: connectedCount > 0 ? 'var(--success-bg)' : 'var(--bg3)',
-              border: `1px solid ${connectedCount > 0 ? 'rgba(34,197,94,0.2)' : 'var(--border-default)'}`,
-              fontSize: 13, fontWeight: 600, color: connectedCount > 0 ? 'var(--success)' : 'var(--text-tertiary)',
-            }}>
-              <i className="ti ti-plug-connected" style={{ fontSize: 13 }} />
-              {connectedCount} of 6 connected
-            </div>
+          <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-sm font-semibold border ${
+            connectedCount > 0
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+              : 'bg-slate-50 border-slate-200 text-slate-400'
+          }`}>
+            <Plug className="w-3.5 h-3.5" />
+            {connectedCount} of 6 connected
           </div>
         </div>
       </motion.div>
@@ -92,25 +103,21 @@ export default function SocialAccountsPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px',
-          background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)',
-          borderRadius: 12, marginBottom: 28,
-        }}
+        className="flex items-center gap-4 px-5 py-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl mb-7"
       >
-        <i className="ti ti-shield-check" style={{ fontSize: 20, color: 'var(--success)', flexShrink: 0 }} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 2 }}>
+        <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-emerald-700 mb-0.5">
             Official OAuth 2.0 — Your passwords never touch our servers
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          <div className="text-xs text-slate-500">
             Tokens are encrypted at rest. Revoke access from your social platform settings anytime.
           </div>
         </div>
       </motion.div>
 
       {/* Platform grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {PLATFORM_ORDER.map((platformId, i) => {
           const config = PLATFORMS[platformId]
           const account = accounts.find(a => a.platform === platformId)
@@ -126,71 +133,63 @@ export default function SocialAccountsPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06 }}
-              style={{
-                background: 'var(--bg-surface)',
-                border: `1px solid ${isError || isTokenExpired ? 'rgba(239,68,68,0.25)' : isConnected ? 'rgba(34,197,94,0.2)' : 'var(--border-subtle)'}`,
-                borderRadius: 16, overflow: 'hidden',
-              }}
+              className={`bg-white rounded-2xl overflow-hidden shadow-sm border transition-colors ${
+                isError || isTokenExpired
+                  ? 'border-red-200'
+                  : isConnected
+                    ? 'border-emerald-200/60'
+                    : 'border-slate-100'
+              }`}
             >
               {/* Card header */}
-              <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div className="p-5 flex items-center gap-3.5">
                 {/* Platform logo */}
-                <div style={{
-                  width: 44, height: 44, borderRadius: 12,
-                  background: config.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 21, flexShrink: 0,
-                  boxShadow: isConnected ? `0 4px 16px ${config.color}30` : 'none',
-                }}>
-                  <i className={`ti ${config.icon}`} style={{ color: platformId === 'snapchat' ? '#000' : '#fff' }} />
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-white text-lg font-bold"
+                  style={{
+                    background: config.gradient,
+                    boxShadow: isConnected ? `0 4px 16px ${config.color}30` : 'none',
+                    color: platformId === 'snapchat' ? '#000' : '#fff',
+                  }}
+                >
+                  {config.label.charAt(0)}
                 </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>{config.label}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[15px] font-bold text-slate-800">{config.label}</div>
                   {isConnected
-                    ? <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>@{account.username}</div>
-                    : <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Not connected</div>
+                    ? <div className="text-xs text-slate-500">@{account.username}</div>
+                    : <div className="text-xs text-slate-400">Not connected</div>
                   }
                 </div>
 
                 {/* Status badge */}
-                {isConnected ? (
+                {isConnected && (
                   (isError || isTokenExpired) ? (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
-                      borderRadius: 99, background: 'var(--danger-bg)', border: '1px solid rgba(239,68,68,0.2)',
-                      color: 'var(--danger)', fontSize: 11, fontWeight: 600,
-                    }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)' }} />
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 border border-red-200 text-red-500 text-[11px] font-semibold">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
                       Token expired
                     </div>
                   ) : (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
-                      borderRadius: 99, background: 'var(--success-bg)', border: '1px solid rgba(34,197,94,0.2)',
-                      color: 'var(--success)', fontSize: 11, fontWeight: 600,
-                    }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', animation: 'pulse 2s infinite' }} />
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] font-semibold">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       Live
                     </div>
                   )
-                ) : null}
+                )}
               </div>
 
               {/* Stats (if connected) */}
               {isConnected && !isError && !isTokenExpired && (
-                <div style={{
-                  display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: 1, background: 'var(--border-subtle)',
-                  borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)',
-                }}>
+                <div className="grid grid-cols-3 border-t border-b border-slate-100">
                   {[
                     { label: 'Followers', value: account.followers > 0 ? (account.followers >= 1000 ? `${(account.followers/1000).toFixed(1)}K` : account.followers) : '—' },
                     { label: 'Formats', value: config.formats.join(', ') },
                     { label: 'Max Duration', value: `${config.maxDurationS}s` },
                   ].map(stat => (
-                    <div key={stat.label} style={{ background: 'var(--bg-surface)', padding: '10px 14px', textAlign: 'center' }}>
-                      <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 14, fontWeight: 700 }}>{stat.value}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>{stat.label}</div>
+                    <div key={stat.label} className="px-4 py-2.5 text-center">
+                      <div className="font-display text-sm font-bold text-slate-800">{stat.value}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{stat.label}</div>
                     </div>
                   ))}
                 </div>
@@ -198,17 +197,13 @@ export default function SocialAccountsPage() {
 
               {/* Error banner */}
               {(isError || isTokenExpired) && account && (
-                <div style={{
-                  margin: '12px 16px', padding: '10px 12px',
-                  background: 'var(--danger-bg)', borderRadius: 9,
-                  display: 'flex', alignItems: 'flex-start', gap: 8,
-                }}>
-                  <i className="ti ti-alert-triangle" style={{ color: 'var(--danger)', fontSize: 14, marginTop: 1, flexShrink: 0 }} />
+                <div className="mx-4 my-3 px-3.5 py-2.5 bg-red-50 rounded-lg flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)', marginBottom: 2 }}>
+                    <div className="text-xs font-semibold text-red-600 mb-0.5">
                       {isTokenExpired ? 'Access token expired' : 'Authentication error'}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    <div className="text-[11px] text-slate-500">
                       Reconnect this account to resume publishing.
                     </div>
                   </div>
@@ -216,22 +211,17 @@ export default function SocialAccountsPage() {
               )}
 
               {/* Actions */}
-              <div style={{ padding: '12px 16px', display: 'flex', gap: 8 }}>
+              <div className="p-4 flex gap-2">
                 {!isConnected ? (
                   <a
                     href={getOAuthUrl(platformId)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold no-underline shadow-sm hover:opacity-90 hover:-translate-y-0.5 transform transition-all duration-150"
                     style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      padding: '10px 16px', borderRadius: 9,
-                      background: config.gradient, color: platformId === 'snapchat' ? '#000' : '#fff',
-                      fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                      transition: 'opacity 0.15s, transform 0.15s',
-                      boxShadow: `0 4px 14px ${config.color}30`,
+                      background: config.gradient,
+                      color: platformId === 'snapchat' ? '#000' : '#fff',
                     }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.9'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
                   >
-                    <i className={`ti ${config.icon}`} style={{ fontSize: 15 }} />
+                    <ExternalLink className="w-4 h-4" />
                     Connect {config.label}
                   </a>
                 ) : (
@@ -239,43 +229,28 @@ export default function SocialAccountsPage() {
                     {(isError || isTokenExpired) ? (
                       <a
                         href={getOAuthUrl(platformId)}
-                        style={{
-                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                          padding: '9px 14px', borderRadius: 9,
-                          background: 'var(--brand)', color: '#fff',
-                          fontSize: 12, fontWeight: 600, textDecoration: 'none',
-                        }}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#E11D48] text-white text-xs font-semibold no-underline hover:bg-[#BE123C] transition-colors"
                       >
-                        <i className="ti ti-refresh" /> Reconnect
+                        <RefreshCw className="w-3.5 h-3.5" /> Reconnect
                       </a>
                     ) : (
                       <button
                         onClick={() => refreshToken(account)}
                         disabled={refreshing === account.id}
-                        style={{
-                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                          padding: '9px 14px', borderRadius: 9,
-                          background: 'transparent', color: 'var(--text-secondary)',
-                          border: '1px solid var(--border-default)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                        }}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-transparent text-slate-500 border border-slate-200 text-xs font-medium cursor-pointer hover:bg-slate-50 hover:text-slate-700 transition-colors disabled:opacity-50"
                       >
-                        <i className={`ti ti-refresh ${refreshing === account.id ? 'animate-spin' : ''}`} style={{ fontSize: 13 }} />
+                        <RefreshCw className={`w-3.5 h-3.5 ${refreshing === account.id ? 'animate-spin' : ''}`} />
                         {refreshing === account.id ? 'Refreshing...' : 'Refresh token'}
                       </button>
                     )}
                     <button
                       onClick={() => disconnect(account)}
                       disabled={disconnecting === account.id}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                        padding: '9px 14px', borderRadius: 9,
-                        background: 'transparent', color: 'var(--danger)',
-                        border: '1px solid rgba(239,68,68,0.2)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                      }}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-transparent text-red-400 border border-red-200/60 text-xs font-medium cursor-pointer hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
                     >
                       {disconnecting === account.id
-                        ? <i className="ti ti-loader animate-spin" style={{ fontSize: 13 }} />
-                        : <><i className="ti ti-unlink" style={{ fontSize: 13 }} /> Disconnect</>
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <><Unlink className="w-3.5 h-3.5" /> Disconnect</>
                       }
                     </button>
                   </>
@@ -284,14 +259,14 @@ export default function SocialAccountsPage() {
 
               {/* Token expiry footer */}
               {account?.token_expires && !isTokenExpired && (
-                <div style={{ padding: '0 16px 12px', fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <i className="ti ti-clock" style={{ fontSize: 11 }} />
+                <div className="px-4 pb-3 text-[11px] text-slate-400 flex items-center gap-1.5">
+                  <Clock className="w-3 h-3" />
                   Token expires: {new Date(account.token_expires).toLocaleDateString()}
                 </div>
               )}
               {account && !account.token_expires && (
-                <div style={{ padding: '0 16px 12px', fontSize: 11, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <i className="ti ti-check" style={{ fontSize: 11 }} />
+                <div className="px-4 pb-3 text-[11px] text-emerald-500 flex items-center gap-1.5">
+                  <Check className="w-3 h-3" />
                   Long-lived token — never expires
                 </div>
               )}
@@ -305,37 +280,32 @@ export default function SocialAccountsPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
-        style={{
-          marginTop: 32, padding: '20px 24px',
-          background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-          borderRadius: 14,
-        }}
+        className="mt-8 p-6 bg-white border border-slate-100 rounded-2xl shadow-sm"
       >
-        <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
+        <div className="font-display text-sm font-bold text-slate-800 mb-4">
           What we access
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { icon: 'ti-photo-up', label: 'Post content', desc: 'Publish photos, videos, reels on your behalf' },
-            { icon: 'ti-chart-bar', label: 'Read insights', desc: 'View post analytics and engagement data' },
-            { icon: 'ti-user', label: 'Basic profile', desc: 'Username, follower count, profile picture' },
-          ].map(p => (
-            <div key={p.label} style={{ display: 'flex', gap: 10 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'var(--brand-dim)', color: 'var(--brand-light)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0,
-              }}>
-                <i className={`ti ${p.icon}`} />
+            { icon: ImageUp, label: 'Post content', desc: 'Publish photos, videos, reels on your behalf' },
+            { icon: BarChart3, label: 'Read insights', desc: 'View post analytics and engagement data' },
+            { icon: User, label: 'Basic profile', desc: 'Username, follower count, profile picture' },
+          ].map(p => {
+            const Icon = p.icon
+            return (
+              <div key={p.label} className="flex gap-3">
+                <div className="w-8 h-8 rounded-lg bg-rose-50 text-[#E11D48] flex items-center justify-center shrink-0">
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-700">{p.label}</div>
+                  <div className="text-[11px] text-slate-400 leading-relaxed">{p.desc}</div>
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>{p.label}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{p.desc}</div>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-        <div style={{ marginTop: 14, fontSize: 11, color: 'var(--text-tertiary)' }}>
+        <div className="mt-4 text-[11px] text-slate-400">
           We never post without your explicit action. We never access DMs, contacts, or financial data.
         </div>
       </motion.div>
