@@ -1,26 +1,29 @@
 # backend/app/services/video_assembler.py
-"""
-Core video assembly: images + audio + subtitles → MP4
-Uses FFmpeg under the hood. No video generation model needed (Phase 1).
-"""
-import asyncio, os, tempfile, subprocess
+import asyncio, os, tempfile, random, logging, time
 from pathlib import Path
 from typing import List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+logger = logging.getLogger("reelforge.video")
 FFMPEG = os.environ.get("FFMPEG_BIN", "ffmpeg")
+
+# Safe zones for text placement (TikTok/Instagram UI overlays)
+SAFE_TOP_PX = 250
+SAFE_BOTTOM_PX = 350
+
 
 @dataclass
 class SceneSpec:
-    image_path: str       # local path or URL
-    duration_ms: int      # milliseconds
-    text: Optional[str]   # subtitle text for this scene
-    transition: str = "fade"  # fade | slide | zoom | none
+    image_path: str
+    duration_ms: int
+    text: Optional[str] = None
+    transition: str = "fade"
+    tts_path: Optional[str] = None
 
 @dataclass
 class AudioSpec:
     path: str
-    type: str    # music | voice
+    type: str = "music"
     volume: float = 1.0
     loop: bool = False
     start_ms: int = 0
@@ -28,10 +31,48 @@ class AudioSpec:
 @dataclass
 class SubtitleStyle:
     font: str = "Arial"
-    size: int = 28
+    size: int = 48
     color: str = "white"
-    position: str = "bottom"   # bottom | center | top
-    style: str = "bold"        # bold | karaoke | bar
+    position: str = "bottom"
+    style: str = "bold"
+
+
+PLATFORM_PRESETS = {
+    "instagram_reel": {"ratio": "9:16", "max_duration_s": 90,  "max_size_mb": 100},
+    "instagram_feed": {"ratio": "1:1",  "max_duration_s": 60,  "max_size_mb": 100},
+    "tiktok":         {"ratio": "9:16", "max_duration_s": 600, "max_size_mb": 1000},
+    "facebook_reel":  {"ratio": "9:16", "max_duration_s": 90,  "max_size_mb": 1000},
+    "youtube_short":  {"ratio": "9:16", "max_duration_s": 60,  "max_size_mb": 256000},
+    "twitter":        {"ratio": "16:9", "max_duration_s": 140, "max_size_mb": 512},
+    "snapchat":       {"ratio": "9:16", "max_duration_s": 60,  "max_size_mb": 32},
+}
+
+
+class RenderValidationError(Exception):
+    pass
+
+
+def validate_render_inputs(scenes: List[SceneSpec], audio_tracks: List[AudioSpec]):
+    if not scenes:
+        raise RenderValidationError("No scenes provided. Add at least one scene before rendering.")
+    for i, scene in enumerate(scenes):
+        if not scene.image_path:
+            raise RenderValidationError(f"Scene {i+1} has no image path.")
+        if scene.duration_ms < 500:
+            raise RenderValidationError(f"Scene {i+1} duration too short ({scene.duration_ms}ms). Minimum 500ms.")
+        if scene.duration_ms > 30000:
+            raise RenderValidationError(f"Scene {i+1} duration too long ({scene.duration_ms}ms). Maximum 30s per scene.")
+    for i, track in enumerate(audio_tracks):
+        if not track.path:
+            raise RenderValidationError(f"Audio track {i+1} has no file path.")
+
+
+def validate_output(output_path: str):
+    if not os.path.exists(output_path):
+        raise RenderValidationError(f"Render produced no output file at {output_path}")
+    size = os.path.getsize(output_path)
+    if size < 10000:
+        raise RenderValidationError(f"Output file too small ({size} bytes) — likely corrupt.")
 
 
 async def assemble_video(
@@ -40,19 +81,23 @@ async def assemble_video(
     output_path: str,
     aspect_ratio: str = "9:16",
     subtitle_style: Optional[SubtitleStyle] = None,
+    project_id: str = "",
 ) -> str:
-    """
-    Build a slideshow MP4 from images + audio.
-    Returns path to the output file.
-    """
+    render_id = os.path.basename(output_path).replace(".mp4", "")
+    start_time = time.time()
+    logger.info(f"render_start project_id={project_id} render_id={render_id} scenes={len(scenes)} audio_tracks={len(audio_tracks)} ratio={aspect_ratio}")
+
+    validate_render_inputs(scenes, audio_tracks)
+
     import httpx
-    
+    w, h = _dimensions(aspect_ratio)
+
     with tempfile.TemporaryDirectory() as tmp:
-        # 0. Download remote images & audio to ensure ffmpeg stability
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Download remote images & audio
+        async with httpx.AsyncClient(timeout=60.0) as client:
             for i, scene in enumerate(scenes):
-                if scene.image_path.startswith("http"):
-                    local_path = os.path.join(tmp, f"downloaded_img_{i}.jpg")
+                if scene.image_path and scene.image_path.startswith("http"):
+                    local_path = os.path.join(tmp, f"img_{i}.jpg")
                     try:
                         r = await client.get(scene.image_path)
                         r.raise_for_status()
@@ -60,10 +105,11 @@ async def assemble_video(
                             f.write(r.content)
                         scene.image_path = local_path
                     except Exception as e:
-                        print(f"Failed to download image {scene.image_path}: {e}")
+                        raise RenderValidationError(f"Failed to download image for scene {i+1}: {e}")
             for i, track in enumerate(audio_tracks):
-                if track.path.startswith("http"):
-                    local_path = os.path.join(tmp, f"downloaded_aud_{i}.mp3")
+                if track.path and track.path.startswith("http"):
+                    ext = ".mp3" if "mp3" in track.path else ".wav"
+                    local_path = os.path.join(tmp, f"aud_{i}{ext}")
                     try:
                         r = await client.get(track.path)
                         r.raise_for_status()
@@ -71,23 +117,20 @@ async def assemble_video(
                             f.write(r.content)
                         track.path = local_path
                     except Exception as e:
-                        print(f"Failed to download audio {track.path}: {e}")
+                        logger.warning(f"Failed to download audio track {i}: {e}")
 
-        # 1. Resolve dimensions
-        w, h = _dimensions(aspect_ratio)
-
-        # 2. Build per-scene video clips
+        # Build per-scene video clips with Ken Burns + smart crop + subtitles
         scene_clips = []
         for i, scene in enumerate(scenes):
             clip_path = os.path.join(tmp, f"scene_{i:03d}.mp4")
-            await _render_scene(scene, clip_path, w, h, subtitle_style)
+            await _render_scene_advanced(scene, clip_path, w, h, subtitle_style, i)
             scene_clips.append(clip_path)
 
-        # 3. Concatenate scenes
+        # Concatenate scenes
         concat_path = os.path.join(tmp, "concat.mp4")
         await _concat_clips(scene_clips, concat_path, tmp)
 
-        # 4. Mix audio tracks onto the video
+        # Mix audio tracks
         if audio_tracks:
             mixed_path = os.path.join(tmp, "mixed.mp4")
             await _mix_audio(concat_path, audio_tracks, mixed_path, _total_duration_ms(scenes))
@@ -95,9 +138,13 @@ async def assemble_video(
         else:
             final_source = concat_path
 
-        # 5. Final encode — H.264 / AAC for maximum platform compatibility
+        # Final encode — H.264 High, CRF 18-22, 30fps, AAC 192k
         await _final_encode(final_source, output_path, w, h)
 
+    validate_output(output_path)
+    duration_s = time.time() - start_time
+    size_mb = os.path.getsize(output_path) / (1024 * 1024)
+    logger.info(f"render_complete project_id={project_id} render_id={render_id} duration={duration_s:.1f}s output_size={size_mb:.1f}MB")
     return output_path
 
 
@@ -115,13 +162,61 @@ def _total_duration_ms(scenes: List[SceneSpec]) -> int:
     return sum(s.duration_ms for s in scenes)
 
 
-def _burn_text_on_image(image_path: str, text: str, style: SubtitleStyle, w: int, h: int, out_path: str):
-    """Burn subtitle text onto image using Pillow — avoids FFmpeg drawtext/libfreetype dependency."""
+def _smart_crop_and_resize(image_path: str, w: int, h: int, out_path: str):
+    from PIL import Image
+    img = Image.open(image_path).convert("RGB")
+    iw, ih = img.size
+
+    target_ratio = w / h
+    img_ratio = iw / ih
+
+    if abs(img_ratio - target_ratio) < 0.05:
+        img = img.resize((w, h), Image.LANCZOS)
+    else:
+        # Try to detect subject/face for smart crop center
+        cx, cy = iw // 2, ih // 2
+        try:
+            from PIL import ImageFilter
+            # Simple subject detection: find highest-energy region
+            gray = img.convert("L")
+            edges = gray.filter(ImageFilter.FIND_EDGES)
+            # Divide into 3x3 grid and find brightest quadrant
+            grid_w, grid_h = iw // 3, ih // 3
+            max_energy = 0
+            for gx in range(3):
+                for gy in range(3):
+                    box = (gx*grid_w, gy*grid_h, (gx+1)*grid_w, (gy+1)*grid_h)
+                    region = edges.crop(box)
+                    energy = sum(region.getdata()) / (grid_w * grid_h)
+                    if energy > max_energy:
+                        max_energy = energy
+                        cx = gx * grid_w + grid_w // 2
+                        cy = gy * grid_h + grid_h // 2
+        except Exception:
+            pass
+
+        # Crop to target aspect ratio centered on subject
+        if img_ratio > target_ratio:
+            new_w = int(ih * target_ratio)
+            left = max(0, min(cx - new_w // 2, iw - new_w))
+            img = img.crop((left, 0, left + new_w, ih))
+        else:
+            new_h = int(iw / target_ratio)
+            top = max(0, min(cy - new_h // 2, ih - new_h))
+            img = img.crop((0, top, iw, top + new_h))
+
+        img = img.resize((w, h), Image.LANCZOS)
+
+    img.save(out_path, "JPEG", quality=95)
+
+
+def _burn_subtitles(image_path: str, text: str, style: SubtitleStyle, w: int, h: int, out_path: str):
     from PIL import Image, ImageDraw, ImageFont
     import textwrap
 
     img = Image.open(image_path).convert("RGB")
-    img = img.resize((w, h), Image.LANCZOS)
+    if img.size != (w, h):
+        img = img.resize((w, h), Image.LANCZOS)
     draw = ImageDraw.Draw(img)
 
     font_size = style.size
@@ -133,54 +228,82 @@ def _burn_text_on_image(image_path: str, text: str, style: SubtitleStyle, w: int
         except Exception:
             font = ImageFont.load_default()
 
-    # Wrap text to fit width
-    max_chars = max(10, w // (font_size // 2))
+    max_chars = max(12, w // (font_size // 2 + 2))
     lines = textwrap.wrap(text, width=max_chars)
-
-    line_h = font_size + 8
+    line_h = font_size + 12
     total_h = line_h * len(lines)
-    y_start = h - total_h - 60 if style.position == "bottom" else (h - total_h) // 2
+
+    # Position text in safe zone
+    if style.position == "bottom":
+        y_start = h - SAFE_BOTTOM_PX + (SAFE_BOTTOM_PX - total_h) // 2
+        y_start = max(h - SAFE_BOTTOM_PX + 20, min(y_start, h - total_h - 40))
+    elif style.position == "top":
+        y_start = SAFE_TOP_PX - total_h - 20
+        y_start = max(20, y_start)
+    else:
+        y_start = (h - total_h) // 2
 
     for i, line in enumerate(lines):
         bbox = draw.textbbox((0, 0), line, font=font)
         text_w = bbox[2] - bbox[0]
         x = (w - text_w) // 2
         y = y_start + i * line_h
-        # Shadow for readability
-        draw.text((x + 2, y + 2), line, font=font, fill=(0, 0, 0, 180))
+        # Background pill for readability
+        padding = 8
+        draw.rounded_rectangle(
+            [x - padding, y - 4, x + text_w + padding, y + font_size + 4],
+            radius=8, fill=(0, 0, 0, 180)
+        )
         draw.text((x, y), line, font=font, fill="white")
 
     img.save(out_path, "JPEG", quality=95)
 
 
-async def _render_scene(scene: SceneSpec, out: str, w: int, h: int, style: Optional[SubtitleStyle]):
+def _get_ken_burns_filter(w: int, h: int, dur: float, scene_index: int) -> str:
+    effects = [
+        # Slow zoom in
+        f"zoompan=z='min(zoom+0.0008,1.12)':d={int(dur*30)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30",
+        # Slow zoom out
+        f"zoompan=z='if(eq(on,1),1.12,max(zoom-0.0008,1.0))':d={int(dur*30)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30",
+        # Pan left to right
+        f"zoompan=z='1.05':d={int(dur*30)}:x='if(eq(on,1),0,min(x+2,(iw-iw/zoom)))':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30",
+        # Pan right to left
+        f"zoompan=z='1.05':d={int(dur*30)}:x='if(eq(on,1),(iw-iw/zoom),max(x-2,0))':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30",
+    ]
+    random.seed(scene_index * 42)
+    return random.choice(effects)
+
+
+async def _render_scene_advanced(scene: SceneSpec, out: str, w: int, h: int, style: Optional[SubtitleStyle], scene_idx: int):
     dur = scene.duration_ms / 1000.0
-    image_path = scene.image_path
+    tmp_dir = os.path.dirname(out)
 
-    # Burn text with Pillow before handing to FFmpeg (avoids drawtext/libfreetype requirement)
-    if scene.text and style:
-        import tempfile, os
-        txt_img = os.path.join(os.path.dirname(out), f"txt_{os.path.basename(out)}.jpg")
-        _burn_text_on_image(image_path, scene.text, style, w, h, txt_img)
-        image_path = txt_img
+    # Smart crop to target dimensions
+    cropped_path = os.path.join(tmp_dir, f"crop_{scene_idx:03d}.jpg")
+    _smart_crop_and_resize(scene.image_path, w, h, cropped_path)
 
-    # Base filter: scale + pad to target resolution
-    vf = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
+    # Burn text/subtitles with Pillow
+    if scene.text and style and style.style != "none":
+        txt_path = os.path.join(tmp_dir, f"txt_{scene_idx:03d}.jpg")
+        _burn_subtitles(cropped_path, scene.text, style, w, h, txt_path)
+        image_path = txt_path
+    else:
+        image_path = cropped_path
 
-    if scene.transition == "zoom":
-        vf += f",zoompan=z='min(zoom+0.002,1.08)':d={int(dur*25)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}"
+    # Ken Burns cinematic motion
+    vf = _get_ken_burns_filter(w, h, dur, scene_idx)
 
     cmd = [
         FFMPEG, "-y",
         "-loop", "1", "-i", image_path,
         "-t", str(dur),
         "-vf", vf,
-        "-r", "25",
+        "-r", "30",
         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
         "-pix_fmt", "yuv420p",
         out
     ]
-    await _run(cmd)
+    await _run(cmd, context=f"scene_{scene_idx}")
 
 
 async def _concat_clips(clips: List[str], out: str, tmp: str):
@@ -189,21 +312,31 @@ async def _concat_clips(clips: List[str], out: str, tmp: str):
         for c in clips:
             f.write(f"file '{c}'\n")
     cmd = [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", out]
-    await _run(cmd)
+    await _run(cmd, context="concat")
 
 
 async def _mix_audio(video: str, tracks: List[AudioSpec], out: str, total_ms: int):
     dur = total_ms / 1000.0
     inputs = ["-i", video]
+    valid_tracks = []
     for t in tracks:
-        inputs += ["-i", t.path]
+        if os.path.exists(t.path):
+            inputs += ["-i", t.path]
+            valid_tracks.append(t)
+        else:
+            logger.warning(f"audio_track_missing path={t.path}")
 
-    # Build amix filter
-    n = len(tracks)
+    if not valid_tracks:
+        # No valid audio — just copy video as-is
+        import shutil
+        shutil.copy2(video, out)
+        return
+
+    n = len(valid_tracks)
     filter_parts = []
-    for i, t in enumerate(tracks):
-        idx = i + 1   # 0 = video stream
-        loop_flag = "loop=-1:size=2e+09:start=0," if t.loop else ""
+    for i, t in enumerate(valid_tracks):
+        idx = i + 1
+        loop_flag = "aloop=loop=-1:size=2e+09:start=0," if t.loop else ""
         filter_parts.append(f"[{idx}:a]{loop_flag}atrim=0:{dur},volume={t.volume}[a{i}]")
 
     mix_inputs = "".join(f"[a{i}]" for i in range(n))
@@ -218,22 +351,24 @@ async def _mix_audio(video: str, tracks: List[AudioSpec], out: str, total_ms: in
         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
         out
     ]
-    await _run(cmd)
+    await _run(cmd, context="mix_audio")
 
 
 async def _final_encode(src: str, out: str, w: int, h: int):
     cmd = [
         FFMPEG, "-y", "-i", src,
-        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-c:v", "libx264", "-profile:v", "high", "-preset", "medium", "-crf", "20",
+        "-r", "30",
         "-c:a", "aac", "-b:a", "192k",
-        "-movflags", "+faststart",   # web-optimised — metadata at start
+        "-movflags", "+faststart",
         "-vf", f"scale={w}:{h}",
         out
     ]
-    await _run(cmd)
+    await _run(cmd, context="final_encode")
 
 
-async def _run(cmd: List[str]):
+async def _run(cmd: List[str], context: str = ""):
+    logger.debug(f"ffmpeg_exec context={context} cmd={' '.join(cmd[:6])}...")
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -241,16 +376,6 @@ async def _run(cmd: List[str]):
     )
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(f"FFmpeg failed:\n{stderr.decode()[-2000:]}")
-
-
-# ── Platform export presets ─────────────────────────────────────────────────
-PLATFORM_PRESETS = {
-    "instagram_reel": {"ratio": "9:16", "max_duration_s": 90,  "max_size_mb": 100},
-    "instagram_feed": {"ratio": "1:1",  "max_duration_s": 60,  "max_size_mb": 100},
-    "tiktok":         {"ratio": "9:16", "max_duration_s": 600, "max_size_mb": 1000},
-    "facebook_reel":  {"ratio": "9:16", "max_duration_s": 90,  "max_size_mb": 1000},
-    "youtube_short":  {"ratio": "9:16", "max_duration_s": 60,  "max_size_mb": 256000},
-    "twitter":        {"ratio": "16:9", "max_duration_s": 140, "max_size_mb": 512},
-    "snapchat":       {"ratio": "9:16", "max_duration_s": 60,  "max_size_mb": 32},
-}
+        error_tail = stderr.decode()[-1500:]
+        logger.error(f"ffmpeg_failed context={context} returncode={proc.returncode} stderr={error_tail[:200]}")
+        raise RuntimeError(f"FFmpeg failed during {context}: {error_tail}")

@@ -1,8 +1,8 @@
 // app/dashboard/social-accounts/page.tsx
 'use client'
-import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase'
 import { PLATFORMS, getOAuthUrl } from '@/lib/platforms'
 import type { SocialAccount } from '@/types'
@@ -25,7 +25,16 @@ import {
 const PLATFORM_ORDER = ['instagram', 'tiktok', 'facebook', 'twitter', 'youtube', 'snapchat']
 
 export default function SocialAccountsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full text-sm text-gray-400">Loading...</div>}>
+      <SocialAccountsContent />
+    </Suspense>
+  )
+}
+
+function SocialAccountsContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
@@ -35,12 +44,31 @@ export default function SocialAccountsPage() {
 
   useEffect(() => {
     loadAccounts()
-    // Handle OAuth callback result
+
+    // Handle OAuth callback result (params set by callback route)
     const connected = searchParams.get('connected')
+    const username = searchParams.get('username')
     const error = searchParams.get('error')
     const platform = searchParams.get('platform')
-    if (connected) toast.success(`${PLATFORMS[connected]?.label || connected} connected!`)
-    if (error) toast.error(`Failed to connect ${platform ? PLATFORMS[platform]?.label : 'account'}. Please try again.`)
+
+    if (connected) {
+      const label = PLATFORMS[connected]?.label || connected
+      const handle = username ? ` as @${username}` : ''
+      toast.success(`${label} connected${handle}! ✓`)
+    }
+    if (error && error !== 'oauth_denied') {
+      const raw = decodeURIComponent(error)
+      const label = platform ? PLATFORMS[platform]?.label : 'account'
+      const msg = raw.length < 120 ? raw : `Failed to connect ${label}. Check your Meta App settings.`
+      toast.error(msg)
+    } else if (error === 'oauth_denied') {
+      toast.info('Connection cancelled.')
+    }
+
+    // Clean URL so params don't persist on page refresh
+    if (connected || error) {
+      router.replace('/dashboard/social-accounts', { scroll: false })
+    }
   }, [])
 
   async function loadAccounts() {
@@ -143,16 +171,31 @@ export default function SocialAccountsPage() {
             >
               {/* Card header */}
               <div className="p-5 flex items-center gap-3.5">
-                {/* Platform logo */}
+                {/* Platform logo / avatar */}
                 <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-white text-lg font-bold"
+                  className="w-11 h-11 rounded-xl shrink-0 overflow-hidden"
                   style={{
-                    background: config.gradient,
                     boxShadow: isConnected ? `0 4px 16px ${config.color}30` : 'none',
-                    color: platformId === 'snapchat' ? '#000' : '#fff',
                   }}
                 >
-                  {config.label.charAt(0)}
+                  {isConnected && account.profile_pic ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={account.profile_pic}
+                      alt={account.username}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center text-lg font-bold"
+                      style={{
+                        background: config.gradient,
+                        color: platformId === 'snapchat' ? '#000' : '#fff',
+                      }}
+                    >
+                      {config.label.charAt(0)}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0">

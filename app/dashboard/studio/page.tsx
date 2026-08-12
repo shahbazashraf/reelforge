@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import { toast } from 'sonner'
@@ -12,6 +12,14 @@ const TRANSITIONS = ['fade','slide','zoom','none']
 const DURATIONS = [3000,4000,5000,6000,7000,8000,10000]
 
 export default function StudioPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>Loading studio...</div>}>
+      <StudioContent />
+    </Suspense>
+  )
+}
+
+function StudioContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const projectId = searchParams.get('project')
@@ -53,10 +61,10 @@ export default function StudioPage() {
     const { data: { user } } = await sb.auth.getUser()
     if (!user) { setSaving(false); return }
 
-    let id = store.projectId
+    let id: string | null = store.projectId
     if (!id) {
       const { data } = await sb.from('projects').insert({ user_id: user.id, title: store.title, aspect_ratio: store.aspectRatio, caption: store.caption, hashtags: store.hashtags, status: 'draft' }).select().single()
-      if (data) { id = data.id; store.setProject(id) }
+      if (data) { id = data.id; store.setProject(id as string) }
     } else {
       await sb.from('projects').update({ title: store.title, aspect_ratio: store.aspectRatio, caption: store.caption, hashtags: store.hashtags, updated_at: new Date().toISOString() }).eq('id', id)
     }
@@ -203,10 +211,18 @@ export default function StudioPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      toast.success('Rendering started. Please wait...')
-      
+      toast.success('Rendering started — generating TTS and assembling video...')
+
       const jobId = data.jobId
+      let pollCount = 0
       const interval = setInterval(async () => {
+        pollCount++
+        if (pollCount > 120) {
+          clearInterval(interval)
+          setRendering(false)
+          toast.error('Render timed out after 6 minutes. Check backend logs.')
+          return
+        }
         try {
           const statusRes = await fetch(`/api/projects/render/${jobId}`)
           if (statusRes.ok) {
@@ -216,6 +232,10 @@ export default function StudioPage() {
               setRendering(false)
               setDownloadUrl(statusData.download_url)
               toast.success('Video ready for download!')
+            } else if (statusData.status === 'error') {
+              clearInterval(interval)
+              setRendering(false)
+              toast.error(statusData.error || 'Render failed')
             }
           }
         } catch (e) {}

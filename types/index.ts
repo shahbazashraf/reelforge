@@ -60,6 +60,7 @@ export interface SocialAccount {
   display_name: string
   profile_pic: string | null
   page_id: string | null
+  platform_user_id: string | null
   followers: number
   status: AccountStatus
   token_expires: string | null

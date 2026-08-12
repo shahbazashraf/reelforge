@@ -102,17 +102,21 @@ create table public.social_accounts (
   display_name  text,
   profile_pic   text,
   page_id       text,
+  platform_user_id text,        -- platform-specific user/page ID for posting
   followers     int default 0,
   status        text default 'active' check (status in ('active','error','expired')),
-  access_token  text,         -- store encrypted; use Supabase vault in prod
+  access_token  text,           -- store encrypted; use Supabase vault in prod
   refresh_token text,
   token_expires timestamptz,
   created_at    timestamptz default now(),
-  unique(user_id, platform)   -- one account per platform per user (extend for multi-accounts)
+  unique(user_id, platform)     -- one account per platform per user
 );
 alter table public.social_accounts enable row level security;
 create policy "Users manage own social accounts"
   on public.social_accounts for all using (auth.uid() = user_id);
+
+-- If table already exists, run this migration to add the column:
+-- ALTER TABLE public.social_accounts ADD COLUMN IF NOT EXISTS platform_user_id text;
 
 -- ── Publish Jobs ──────────────────────────────────────────────────────────
 create table public.publish_jobs (

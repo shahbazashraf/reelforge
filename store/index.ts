@@ -144,7 +144,7 @@ interface UIState {
   activeToast: { message: string; type: 'success' | 'error' | 'info' } | null
   setSidebarOpen: (open: boolean) => void
   setCommandPalette: (open: boolean) => void
-  showToast: (message: string, type?: UIState['activeToast']['type']) => void
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void
   clearToast: () => void
 }
 
@@ -154,6 +154,6 @@ export const useUIStore = create<UIState>()((set) => ({
   activeToast: null,
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   setCommandPalette: (commandPaletteOpen) => set({ commandPaletteOpen }),
-  showToast: (message, type = 'info') => set({ activeToast: { message, type } }),
+  showToast: (message, type = 'info') => set({ activeToast: { message, type: type! } }),
   clearToast: () => set({ activeToast: null }),
 }))

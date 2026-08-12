@@ -9,18 +9,25 @@ export async function GET(
   const BACKEND = process.env.BACKEND_URL || 'http://localhost:8000'
   try {
     const res = await fetch(`${BACKEND}/api/projects/output/${jobId}`)
-    if (!res.ok) return NextResponse.json({ status: 'error' }, { status: 500 })
+    if (!res.ok) {
+      return NextResponse.json({ status: 'error', error: 'Failed to check render status' }, { status: 500 })
+    }
 
     const data = await res.json()
+
+    if (data.status === 'error') {
+      return NextResponse.json({ status: 'error', error: data.error || 'Render failed' })
+    }
+
     if (data.status === 'ready') {
       return NextResponse.json({
         status: 'ready',
-        download_url: `${BACKEND}/api/projects/download/${jobId}`
+        download_url: `${BACKEND}/api/projects/download/${jobId}`,
       })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({ status: 'processing' })
   } catch {
-    return NextResponse.json({ status: 'error' }, { status: 500 })
+    return NextResponse.json({ status: 'error', error: 'Render service unreachable' }, { status: 502 })
   }
 }

@@ -14,7 +14,11 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { projectId, platforms, scheduledAt } = await request.json()
+  const body = await request.json()
+  const { projectId, platforms, scheduledAt } = body
+
+  if (!projectId) return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
+  if (!platforms?.length) return NextResponse.json({ error: 'Select at least one platform to publish to' }, { status: 400 })
 
   // Get project
   const { data: project } = await supabase
@@ -25,7 +29,27 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-  if (!project.output_url) return NextResponse.json({ error: 'Project not rendered yet. Render first.' }, { status: 400 })
+
+  // Validate render is complete
+  if (!project.output_url) {
+    return NextResponse.json({
+      error: 'Video not rendered yet. Click "Render Video" first, wait for it to complete, then publish.',
+    }, { status: 400 })
+  }
+
+  // Validate the output URL is reachable
+  try {
+    const checkRes = await fetch(project.output_url, { method: 'HEAD' })
+    if (!checkRes.ok) {
+      return NextResponse.json({
+        error: 'Rendered video file not found. The render may have expired. Please re-render the video.',
+      }, { status: 400 })
+    }
+  } catch {
+    return NextResponse.json({
+      error: 'Cannot reach the rendered video file. Ensure the backend is running and re-render if needed.',
+    }, { status: 400 })
+  }
 
   // Get social accounts for selected platforms
   const { data: accounts } = await supabase
@@ -36,13 +60,14 @@ export async function POST(request: NextRequest) {
     .in('platform', platforms)
 
   if (!accounts?.length) {
-    return NextResponse.json({ error: 'No connected accounts for selected platforms' }, { status: 400 })
+    return NextResponse.json({
+      error: `No connected accounts for: ${platforms.join(', ')}. Connect your accounts in Settings → Social Accounts first.`,
+    }, { status: 400 })
   }
 
   const jobs = []
 
   for (const account of accounts) {
-    // Create publish job record
     const { data: job } = await supabase.from('publish_jobs').insert({
       project_id: projectId,
       user_id: user.id,
@@ -55,7 +80,6 @@ export async function POST(request: NextRequest) {
     jobs.push(job)
 
     if (!scheduledAt) {
-      // Dispatch to Python worker or call platform API directly
       const BACKEND = process.env.BACKEND_URL || 'http://localhost:8000'
       fetch(`${BACKEND}/api/publish/now`, {
         method: 'POST',
@@ -63,14 +87,16 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           job_id: job?.id,
           platform: account.platform,
-          video_url: project.output_url,
+          video_path: project.output_url,
           caption: project.caption || '',
           hashtags: project.hashtags || '',
           access_token: account.access_token,
           page_id: account.page_id || '',
           ig_user_id: account.platform === 'instagram' ? account.page_id : '',
         }),
-      }).catch(console.error) // fire and forget — worker updates DB
+      }).catch((err) => {
+        console.error(`[publish] dispatch failed for ${account.platform}:`, err.message)
+      })
     }
   }
 

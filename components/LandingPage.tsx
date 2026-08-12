@@ -207,7 +207,7 @@ export default function LandingPage() {
                   <span className="font-display font-bold text-xs tracking-tight">ReelForge Studio</span>
                 </div>
                 <div className="flex flex-col gap-1">
-                  {[['Wand2','Studio',true],['Film','Projects',false],['Send','Publish',false],['BarChart2','Analytics',false]].map(([iconName,label,active]) => {
+                  {([['Wand2','Studio',true],['Film','Projects',false],['Send','Publish',false],['BarChart2','Analytics',false]] as [string,string,boolean][]).map(([iconName,label,active]) => {
                     const Icon = iconName === 'Wand2' ? Wand2 : iconName === 'Film' ? Film : iconName === 'Send' ? Send : BarChart2
                     return (
                       <div key={label} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold ${
